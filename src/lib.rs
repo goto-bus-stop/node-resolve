@@ -136,7 +136,6 @@ impl Resolver {
 
     /// Resolve using the package.json "main" key.
     fn resolve_package_main(&self, pkg_path: &PathBuf) -> Result<PathBuf, ResolutionError> {
-        println!("resolve_package_main: {:?}", pkg_path);
         let root = PathBuf::from("/");
         let pkg_dir = pkg_path.parent().unwrap_or(&root);
         let file = File::open(pkg_path)?;
@@ -157,7 +156,6 @@ impl Resolver {
 
     /// Resolve a directory to its index.EXT.
     fn resolve_index(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
-        println!("resolve_index: {:?}", path);
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         let js_path = path.join("index.js");
         if js_path.is_file() {
@@ -180,7 +178,6 @@ impl Resolver {
     /// Resolve by walking up node_modules folders.
     fn resolve_node_modules(&self, target: &String) -> Result<PathBuf, ResolutionError> {
         let node_modules = self.basedir.join("node_modules");
-        println!("resolve_node_modules: {:?} / {:?}", node_modules, target);
         if node_modules.is_dir() {
             let path = node_modules.join(target);
             let result = self.resolve_as_file(&path)
