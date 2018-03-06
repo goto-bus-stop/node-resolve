@@ -4,7 +4,4 @@ rust:
   - beta
   - nightly
 
-script:
-  - "cargo test --lib --verbose"
-
 cache: cargo
