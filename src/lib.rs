@@ -47,11 +47,19 @@ impl Error for ResolutionError {
 #[derive(Clone)]
 struct Resolver {
     basedir: PathBuf,
+    extensions: Vec<String>,
 }
 
 impl Resolver {
     fn new(basedir: PathBuf) -> Self {
-        Resolver { basedir }
+        Resolver {
+            basedir,
+            extensions: vec![
+                String::from(".js"),
+                String::from(".json"),
+                String::from(".node"),
+            ],
+        }
     }
 
     /// Create a new resolver with a different basedir.
@@ -59,12 +67,30 @@ impl Resolver {
         Resolver { basedir, ..self.clone() }
     }
 
+    /// Create a new resolver with a different set of extensions.
+    fn with_extensions<T>(&self, extensions: T) -> Self
+        where T: IntoIterator,
+              T::Item: ToString
+    {
+        Resolver {
+            extensions: extensions.into_iter()
+                .map(|ext| ext.to_string())
+                .map(|ext| if ext.starts_with(".") {
+                    ext
+                } else {
+                    format!(".{}", ext)
+                })
+                .collect(),
+            ..self.clone()
+        }
+    }
+
     /// Check if a string references a core module, such as "events".
     fn is_core_module(&self, target: &String) -> bool {
         false
     }
 
-    /// Resolve.
+    /// Resolve a `require()` argument.
     fn resolve(&self, target: String) -> Result<PathBuf, ResolutionError> {
         // 1. If X is a core module
         if self.is_core_module(&target) {
@@ -96,23 +122,15 @@ impl Resolver {
             return Ok(path.clone());
         }
 
+        // 1. If X.js is a file, load X.js as JavaScript text.
+        // 2. If X.json is a file, parse X.json to a JavaScript object.
+        // 3. If X.node is a file, load X.node as binary addon.
         let str_path = path.to_str().ok_or_else(|| ResolutionError::new("Invalid path"))?;
-        // 2. If X.js is a file, load X as JavaScript text.
-        let js_path = PathBuf::from(format!("{}.js", str_path));
-        if js_path.is_file() {
-            return Ok(js_path);
-        }
-
-        // 3. If X.json is a file, parse X.json to a JavaScript Object.
-        let json_path = PathBuf::from(format!("{}.json", str_path));
-        if json_path.is_file() {
-            return Ok(json_path);
-        }
-
-        // 4. If X.node is a file, load X.node as binary addon.
-        let node_path = PathBuf::from(format!("{}.node", str_path));
-        if node_path.is_file() {
-            return Ok(node_path);
+        for ext in self.extensions.iter() {
+            let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
+            if ext_path.is_file() {
+                return Ok(ext_path);
+            }
         }
 
         Err(ResolutionError::new("Not found"))
@@ -157,19 +175,13 @@ impl Resolver {
     /// Resolve a directory to its index.EXT.
     fn resolve_index(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
-        let js_path = path.join("index.js");
-        if js_path.is_file() {
-            return Ok(js_path);
-        }
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
-        let json_path = path.join("index.json");
-        if json_path.is_file() {
-            return Ok(json_path);
-        }
         // 3. If X/index.node is a file, load X/index.node as binary addon.
-        let node_path = path.join("index.node");
-        if node_path.is_file() {
-            return Ok(node_path);
+        for ext in self.extensions.iter() {
+            let ext_path = path.join(format!("index{}", ext));
+            if ext_path.is_file() {
+                return Ok(ext_path);
+            }
         }
 
         Err(ResolutionError::new("Not found"))
