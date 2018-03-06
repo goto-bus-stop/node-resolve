@@ -50,7 +50,7 @@ struct Resolver {
 }
 
 impl Resolver {
-    fn create(basedir: PathBuf) -> Self {
+    fn new(basedir: PathBuf) -> Self {
         Resolver { basedir }
     }
 
@@ -179,17 +179,34 @@ impl Resolver {
 
     /// Resolve by walking up node_modules folders.
     fn resolve_node_modules(&self, target: &String) -> Result<PathBuf, ResolutionError> {
-        Err(ResolutionError::new("Not implemented"))
+        let node_modules = self.basedir.join("node_modules");
+        println!("resolve_node_modules: {:?} / {:?}", node_modules, target);
+        if node_modules.is_dir() {
+            let path = node_modules.join(target);
+            let result = self.resolve_as_file(&path)
+                .or_else(|_| self.resolve_as_directory(&path));
+            if result.is_ok() {
+                return result
+            }
+        }
+
+        match self.basedir.parent() {
+            Some(parent) => self.with_basedir(parent.to_path_buf()).resolve_node_modules(target),
+            None => Err(ResolutionError::new("Not found")),
+        }
     }
 }
 
+/// Resolve a node.js module path relative to the current working directory.
 pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
     env::current_dir()
         .map_err(|_| ResolutionError::new("Working directory does not exist"))
         .and_then(|dir| resolve_from(target, dir))
 }
+
+/// Resolve a node.js module path relative to `basedir`.
 pub fn resolve_from(target: String, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
-    Resolver::create(basedir).resolve(target)
+    Resolver::new(basedir).resolve(target)
 }
 
 #[cfg(test)]
@@ -219,7 +236,16 @@ mod tests {
         assert_eq!(fixture("package-json/main-file-noext/whatever.js"), resolve_fixture("./package-json/main-file-noext"));
         assert_eq!(fixture("package-json/main-dir/subdir/index.js"), resolve_fixture("./package-json/main-dir"));
         assert_eq!(fixture("package-json/not-object/index.js"), resolve_fixture("./package-json/not-object"));
-        // assert_eq!(fixture("package-json/invalid/index.js"), resolve_fixture("./package-json/invalid"));
+        assert_eq!(fixture("package-json/invalid/index.js"), resolve_fixture("./package-json/invalid"));
         assert_eq!(fixture("package-json/main-none/index.js"), resolve_fixture("./package-json/main-none"));
+    }
+
+    #[test]
+    fn resolves_node_modules() {
+        assert_eq!(fixture("node-modules/same-dir/node_modules/a.js"), ::resolve_from(String::from("a"), fixture("node-modules/same-dir")).unwrap());
+        assert_eq!(fixture("node-modules/parent-dir/node_modules/a/index.js"), ::resolve_from(String::from("a"), fixture("node-modules/parent-dir/src")).unwrap());
+        assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from(String::from("dep"), fixture("node-modules/package-json")).unwrap());
+        assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from(String::from("not-ok"), fixture("node-modules/walk/src")).unwrap());
+        assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from(String::from("ok"), fixture("node-modules/walk/src")).unwrap());
     }
 }
