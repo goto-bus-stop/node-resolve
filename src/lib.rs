@@ -119,15 +119,18 @@ impl Resolver {
             return Ok(PathBuf::from(target));
         }
 
+        // TODO how to not always initialise this here?
+        let root = PathBuf::from("/");
+        let mut basedir = &self.basedir;
         // 2. If X begins with '/'
         if target.starts_with('/') {
             // 2.a. Set Y to be the filesystem root
-            return self.with_basedir(PathBuf::from("/")).resolve(target);
+            basedir = &root;
         }
 
         // 3. If X begins with './' or '/' or '../'
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
-            let path = self.basedir.as_path().join(target);
+            let path = basedir.as_path().join(target);
             return self.resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path));
         }
@@ -175,6 +178,7 @@ impl Resolver {
 
     /// Resolve using the package.json "main" key.
     fn resolve_package_main(&self, pkg_path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+        // TODO how to not always initialise this here?
         let root = PathBuf::from("/");
         let pkg_dir = pkg_path.parent().unwrap_or(&root);
         let file = File::open(pkg_path)?;
@@ -293,5 +297,12 @@ mod tests {
         assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from(String::from("dep"), fixture("node-modules/package-json")).unwrap());
         assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from(String::from("not-ok"), fixture("node-modules/walk/src")).unwrap());
         assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from(String::from("ok"), fixture("node-modules/walk/src")).unwrap());
+    }
+
+    #[test]
+    fn resolves_absolute_specifier() {
+        let full_path = fixture("extensions/js-file");
+        let id = full_path.to_str().unwrap();
+        assert_eq!(fixture("extensions/js-file.js"), ::resolve(String::from(id)).unwrap());
     }
 }
