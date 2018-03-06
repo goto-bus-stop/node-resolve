@@ -91,7 +91,7 @@ impl Resolver {
         Resolver {
             extensions: extensions.into_iter()
                 .map(|ext| ext.to_string())
-                .map(|ext| if ext.starts_with(".") {
+                .map(|ext| if ext.starts_with('.') {
                     ext
                 } else {
                     format!(".{}", ext)
@@ -107,7 +107,7 @@ impl Resolver {
     }
 
     /// Check if a string references a core module, such as "events".
-    fn is_core_module(&self, target: &String) -> bool {
+    fn is_core_module(&self, target: &str) -> bool {
         false
     }
 
@@ -120,13 +120,13 @@ impl Resolver {
         }
 
         // 2. If X begins with '/'
-        if target.starts_with("/") {
+        if target.starts_with('/') {
             // 2.a. Set Y to be the filesystem root
             return self.with_basedir(PathBuf::from("/")).resolve(target);
         }
 
         // 3. If X begins with './' or '/' or '../'
-        if target.starts_with("./") || target.starts_with("/") || target.starts_with("../") {
+        if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
             let path = self.basedir.as_path().join(target);
             return self.resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path));
@@ -147,7 +147,7 @@ impl Resolver {
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
         let str_path = path.to_str().ok_or_else(|| ResolutionError::new("Invalid path"))?;
-        for ext in self.extensions.iter() {
+        for ext in &self.extensions {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
@@ -198,7 +198,7 @@ impl Resolver {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
-        for ext in self.extensions.iter() {
+        for ext in &self.extensions {
             let ext_path = path.join(format!("index{}", ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
@@ -209,7 +209,7 @@ impl Resolver {
     }
 
     /// Resolve by walking up node_modules folders.
-    fn resolve_node_modules(&self, target: &String) -> Result<PathBuf, ResolutionError> {
+    fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, ResolutionError> {
         let node_modules = self.basedir.join("node_modules");
         if node_modules.is_dir() {
             let path = node_modules.join(target);
