@@ -1,3 +1,14 @@
+//! Resolve module identifiers in a Node-style `require()` to a full file path.
+//!
+//! ```rust
+//! use node_resolve::{resolve, resolve_from};
+//!
+//! resolve("abc");
+//! // → Ok("/path/to/cwd/node_modules/abc/index.js")
+//! resolve_from("abc", PathBuf::from("/other/path"));
+//! // → Ok("/other/path/node_modules/abc/index.js")
+//! ```
+
 extern crate serde_json;
 
 use std::env;
@@ -7,6 +18,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use serde_json::Value;
 
+/// An Error, returned when the module could not be resolved.
 #[derive(Debug)]
 pub struct ResolutionError {
     description: String
@@ -44,13 +56,16 @@ impl Error for ResolutionError {
     }
 }
 
+/// Resolver instances keep track of options.
 #[derive(Clone)]
 struct Resolver {
     basedir: PathBuf,
     extensions: Vec<String>,
+    preserve_symlinks: bool,
 }
 
 impl Resolver {
+    /// Create a new resolver with the given basedir.
     fn new(basedir: PathBuf) -> Self {
         Resolver {
             basedir,
@@ -59,6 +74,7 @@ impl Resolver {
                 String::from(".json"),
                 String::from(".node"),
             ],
+            preserve_symlinks: false,
         }
     }
 
@@ -83,6 +99,11 @@ impl Resolver {
                 .collect(),
             ..self.clone()
         }
+    }
+
+    /// Create a new resolver with a different symlink option.
+    fn preserve_symlinks(&self, preserve_symlinks: bool) -> Self {
+        Resolver { preserve_symlinks, ..self.clone() }
     }
 
     /// Check if a string references a core module, such as "events".
@@ -207,6 +228,14 @@ impl Resolver {
 }
 
 /// Resolve a node.js module path relative to the current working directory.
+/// Returns the absolute path to the module, or an error.
+///
+/// ```rust
+/// match resolve("./lib") {
+///     Ok(path) => println!("Path is: {:?}", path),
+///     Err(err) => panic!("Failed: {:?}", err),
+/// }
+/// ```
 pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
     env::current_dir()
         .map_err(|_| ResolutionError::new("Working directory does not exist"))
@@ -214,6 +243,14 @@ pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
 }
 
 /// Resolve a node.js module path relative to `basedir`.
+/// Returns the absolute path to the module, or an error.
+///
+/// ```rust
+/// match resolve_from("./index.js", env::current_dir().unwrap()) {
+///     Ok(path) => println!("Path is: {:?}", path),
+///     Err(err) => panic!("Failed: {:?}", err),
+/// }
+/// ```
 pub fn resolve_from(target: String, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
     Resolver::new(basedir).resolve(target)
 }
