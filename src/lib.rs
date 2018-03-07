@@ -10,6 +10,7 @@
 //! ```
 
 extern crate serde_json;
+extern crate node_builtins;
 
 use std::env;
 use std::fmt;
@@ -17,6 +18,7 @@ use std::fs::File;
 use std::error::Error;
 use std::path::PathBuf;
 use serde_json::Value;
+use node_builtins::BUILTINS;
 
 /// An Error, returned when the module could not be resolved.
 #[derive(Debug)]
@@ -106,15 +108,10 @@ impl Resolver {
         Resolver { preserve_symlinks, ..self.clone() }
     }
 
-    /// Check if a string references a core module, such as "events".
-    fn is_core_module(&self, target: &str) -> bool {
-        false
-    }
-
     /// Resolve a `require()` argument.
     fn resolve(&self, target: String) -> Result<PathBuf, ResolutionError> {
         // 1. If X is a core module
-        if self.is_core_module(&target) {
+        if is_core_module(&target) {
             // 1.a. Return the core module
             return Ok(PathBuf::from(target));
         }
@@ -231,6 +228,11 @@ impl Resolver {
     }
 }
 
+/// Check if a string references a core module, such as "events".
+pub fn is_core_module(target: &str) -> bool {
+    BUILTINS.iter().any(|builtin| builtin == &target)
+}
+
 /// Resolve a node.js module path relative to the current working directory.
 /// Returns the absolute path to the module, or an error.
 ///
@@ -304,5 +306,13 @@ mod tests {
         let full_path = fixture("extensions/js-file");
         let id = full_path.to_str().unwrap();
         assert_eq!(fixture("extensions/js-file.js"), ::resolve(String::from(id)).unwrap());
+    }
+
+    #[test]
+    fn core_modules() {
+        assert!(::is_core_module("events"));
+        assert!(!::is_core_module("./events"));
+        assert!(::is_core_module("stream"));
+        assert!(!::is_core_module("acorn"));
     }
 }
