@@ -15,13 +15,7 @@ Add to your Cargo.toml:
 
 ```toml
 [dependencies]
-node-resolve = "1.0.0"
-```
-
-Or do
-
-```
-cargo add node-resolve
+node-resolve = "1.1.0"
 ```
 
 ## Usage
