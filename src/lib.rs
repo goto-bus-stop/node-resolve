@@ -32,13 +32,13 @@ impl ResolutionError {
 }
 
 impl From<serde_json::Error> for ResolutionError {
-    fn from(error: serde_json::Error) -> Self {
+    fn from(_error: serde_json::Error) -> Self {
         ResolutionError::new("Json parse error")
     }
 }
 
 impl From<std::io::Error> for ResolutionError {
-    fn from(error: std::io::Error) -> Self {
+    fn from(_error: std::io::Error) -> Self {
         ResolutionError::new("Io error")
     }
 }
@@ -118,12 +118,13 @@ impl Resolver {
 
         // TODO how to not always initialise this here?
         let root = PathBuf::from("/");
-        let mut basedir = &self.basedir;
         // 2. If X begins with '/'
-        if target.starts_with('/') {
+        let basedir = if target.starts_with('/') {
             // 2.a. Set Y to be the filesystem root
-            basedir = &root;
-        }
+            &root
+        } else {
+            &self.basedir
+        };
 
         // 3. If X begins with './' or '/' or '../'
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
