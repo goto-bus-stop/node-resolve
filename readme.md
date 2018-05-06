@@ -7,6 +7,7 @@ Rust implementation of the [Node.js module resolution algorithm](https://nodejs.
 Missing features:
 
  - [ ] --preserve-symlinks (currently always preserves symlinks, unlike Node)
+ - [ ] async?
  - [ ] maybe more
 
 ## Install
@@ -15,7 +16,7 @@ Add to your Cargo.toml:
 
 ```toml
 [dependencies]
-node-resolve = "1.1.0"
+node-resolve = "2.0.0"
 ```
 
 ## Usage
