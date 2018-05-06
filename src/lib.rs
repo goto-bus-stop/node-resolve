@@ -112,7 +112,7 @@ impl Resolver {
     }
 
     /// Resolve a `require()` argument.
-    pub fn resolve(&self, target: String) -> Result<PathBuf, ResolutionError> {
+    pub fn resolve(&self, target: &str) -> Result<PathBuf, ResolutionError> {
         // 1. If X is a core module
         if is_core_module(&target) {
             // 1.a. Return the core module
@@ -247,7 +247,7 @@ pub fn is_core_module(target: &str) -> bool {
 ///     Err(err) => panic!("Failed: {:?}", err),
 /// }
 /// ```
-pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
+pub fn resolve(target: &str) -> Result<PathBuf, ResolutionError> {
     Resolver::new().with_basedir(PathBuf::from(".")).resolve(target)
 }
 
@@ -260,7 +260,7 @@ pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
 ///     Err(err) => panic!("Failed: {:?}", err),
 /// }
 /// ```
-pub fn resolve_from(target: String, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
+pub fn resolve_from(target: &str, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
     Resolver::new().with_basedir(basedir).resolve(target)
 }
 
@@ -273,7 +273,7 @@ mod tests {
         env::current_dir().unwrap().join("fixtures").join(part)
     }
     fn resolve_fixture(target: &str) -> PathBuf {
-        ::resolve_from(String::from(target), fixture("")).unwrap()
+        ::resolve_from(target, fixture("")).unwrap()
     }
 
     #[test]
@@ -297,18 +297,18 @@ mod tests {
 
     #[test]
     fn resolves_node_modules() {
-        assert_eq!(fixture("node-modules/same-dir/node_modules/a.js"), ::resolve_from(String::from("a"), fixture("node-modules/same-dir")).unwrap());
-        assert_eq!(fixture("node-modules/parent-dir/node_modules/a/index.js"), ::resolve_from(String::from("a"), fixture("node-modules/parent-dir/src")).unwrap());
-        assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from(String::from("dep"), fixture("node-modules/package-json")).unwrap());
-        assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from(String::from("not-ok"), fixture("node-modules/walk/src")).unwrap());
-        assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from(String::from("ok"), fixture("node-modules/walk/src")).unwrap());
+        assert_eq!(fixture("node-modules/same-dir/node_modules/a.js"), ::resolve_from("a", fixture("node-modules/same-dir")).unwrap());
+        assert_eq!(fixture("node-modules/parent-dir/node_modules/a/index.js"), ::resolve_from("a", fixture("node-modules/parent-dir/src")).unwrap());
+        assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from("dep", fixture("node-modules/package-json")).unwrap());
+        assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from("not-ok", fixture("node-modules/walk/src")).unwrap());
+        assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from("ok", fixture("node-modules/walk/src")).unwrap());
     }
 
     #[test]
     fn resolves_absolute_specifier() {
         let full_path = fixture("extensions/js-file");
         let id = full_path.to_str().unwrap();
-        assert_eq!(fixture("extensions/js-file.js"), ::resolve(String::from(id)).unwrap());
+        assert_eq!(fixture("extensions/js-file.js"), ::resolve(id).unwrap());
     }
 
     #[test]
