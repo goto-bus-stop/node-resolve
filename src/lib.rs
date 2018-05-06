@@ -12,7 +12,6 @@
 extern crate serde_json;
 extern crate node_builtins;
 
-use std::env;
 use std::fmt;
 use std::fs::File;
 use std::error::Error;
@@ -60,7 +59,7 @@ impl Error for ResolutionError {
 
 /// Resolver instances keep track of options.
 #[derive(Clone)]
-struct Resolver {
+pub struct Resolver {
     basedir: Option<PathBuf>,
     extensions: Vec<String>,
     preserve_symlinks: bool,
@@ -68,7 +67,7 @@ struct Resolver {
 
 impl Resolver {
     /// Create a new resolver with the given options.
-    fn new() -> Self {
+    pub fn new() -> Self {
         Resolver {
             basedir: None,
             extensions: vec![
@@ -85,12 +84,12 @@ impl Resolver {
     }
 
     /// Create a new resolver with a different basedir.
-    fn with_basedir(&self, basedir: PathBuf) -> Self {
+    pub fn with_basedir(&self, basedir: PathBuf) -> Self {
         Resolver { basedir: Some(basedir), ..self.clone() }
     }
 
     /// Create a new resolver with a different set of extensions.
-    fn with_extensions<T>(&self, extensions: T) -> Self
+    pub fn with_extensions<T>(&self, extensions: T) -> Self
         where T: IntoIterator,
               T::Item: ToString
     {
@@ -108,12 +107,12 @@ impl Resolver {
     }
 
     /// Create a new resolver with a different symlink option.
-    fn preserve_symlinks(&self, preserve_symlinks: bool) -> Self {
+    pub fn preserve_symlinks(&self, preserve_symlinks: bool) -> Self {
         Resolver { preserve_symlinks, ..self.clone() }
     }
 
     /// Resolve a `require()` argument.
-    fn resolve(&self, target: String) -> Result<PathBuf, ResolutionError> {
+    pub fn resolve(&self, target: String) -> Result<PathBuf, ResolutionError> {
         // 1. If X is a core module
         if is_core_module(&target) {
             // 1.a. Return the core module
