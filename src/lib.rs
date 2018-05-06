@@ -61,16 +61,16 @@ impl Error for ResolutionError {
 /// Resolver instances keep track of options.
 #[derive(Clone)]
 struct Resolver {
-    basedir: PathBuf,
+    basedir: Option<PathBuf>,
     extensions: Vec<String>,
     preserve_symlinks: bool,
 }
 
 impl Resolver {
-    /// Create a new resolver with the given basedir.
-    fn new(basedir: PathBuf) -> Self {
+    /// Create a new resolver with the given options.
+    fn new() -> Self {
         Resolver {
-            basedir,
+            basedir: None,
             extensions: vec![
                 String::from(".js"),
                 String::from(".json"),
@@ -80,9 +80,13 @@ impl Resolver {
         }
     }
 
+    fn get_basedir(&self) -> Result<&PathBuf, ResolutionError> {
+        self.basedir.as_ref().ok_or_else(|| ResolutionError::new("Must set a basedir before resolving"))
+    }
+
     /// Create a new resolver with a different basedir.
     fn with_basedir(&self, basedir: PathBuf) -> Self {
-        Resolver { basedir, ..self.clone() }
+        Resolver { basedir: Some(basedir), ..self.clone() }
     }
 
     /// Create a new resolver with a different set of extensions.
@@ -123,7 +127,7 @@ impl Resolver {
             // 2.a. Set Y to be the filesystem root
             &root
         } else {
-            &self.basedir
+            self.get_basedir()?
         };
 
         // 3. If X begins with './' or '/' or '../'
@@ -212,7 +216,8 @@ impl Resolver {
 
     /// Resolve by walking up node_modules folders.
     fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, ResolutionError> {
-        let node_modules = self.basedir.join("node_modules");
+        let basedir = self.get_basedir()?;
+        let node_modules = basedir.join("node_modules");
         if node_modules.is_dir() {
             let path = node_modules.join(target);
             let result = self.resolve_as_file(&path)
@@ -222,7 +227,7 @@ impl Resolver {
             }
         }
 
-        match self.basedir.parent() {
+        match basedir.parent() {
             Some(parent) => self.with_basedir(parent.to_path_buf()).resolve_node_modules(target),
             None => Err(ResolutionError::new("Not found")),
         }
@@ -244,9 +249,7 @@ pub fn is_core_module(target: &str) -> bool {
 /// }
 /// ```
 pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
-    env::current_dir()
-        .map_err(|_| ResolutionError::new("Working directory does not exist"))
-        .and_then(|dir| resolve_from(target, dir))
+    Resolver::new().with_basedir(PathBuf::from(".")).resolve(target)
 }
 
 /// Resolve a node.js module path relative to `basedir`.
@@ -259,7 +262,7 @@ pub fn resolve(target: String) -> Result<PathBuf, ResolutionError> {
 /// }
 /// ```
 pub fn resolve_from(target: String, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
-    Resolver::new(basedir).resolve(target)
+    Resolver::new().with_basedir(basedir).resolve(target)
 }
 
 #[cfg(test)]
