@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 2.1.1
+* Exclude test symlink from the package so it can be published.
+
 ## 2.1.0
 * Normalize paths before returning. You will now receive eg. `/a/b/c.js` instead
   of `/a/./b/c.js`.
