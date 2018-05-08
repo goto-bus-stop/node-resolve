@@ -15,7 +15,7 @@ extern crate node_builtins;
 use std::fmt;
 use std::fs::File;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf, Component as PathComponent};
 use serde_json::Value;
 use node_builtins::BUILTINS;
 
@@ -133,10 +133,11 @@ impl Resolver {
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
             let path = basedir.as_path().join(target);
             return self.resolve_as_file(&path)
-                .or_else(|_| self.resolve_as_directory(&path));
+                .or_else(|_| self.resolve_as_directory(&path))
+                .map(|p| normalize_path(&p));
         }
 
-        self.resolve_node_modules(&target)
+        self.resolve_node_modules(&target).map(|p| normalize_path(&p))
     }
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
@@ -231,6 +232,30 @@ impl Resolver {
             None => Err(ResolutionError::new("Not found")),
         }
     }
+}
+
+fn normalize_path(p: &Path) -> PathBuf {
+    let mut normalized = PathBuf::from("/");
+    for part in p.components() {
+        match part {
+            PathComponent::Prefix(ref prefix) => {
+                normalized.push(prefix.as_os_str());
+            },
+            PathComponent::RootDir => {
+                normalized.push("/");
+            },
+            PathComponent::ParentDir => {
+                normalized.pop();
+            },
+            PathComponent::CurDir => {
+                // Nothing
+            },
+            PathComponent::Normal(ref name) => {
+                normalized.push(name);
+            },
+        }
+    }
+    normalized
 }
 
 /// Check if a string references a core module, such as "events".
