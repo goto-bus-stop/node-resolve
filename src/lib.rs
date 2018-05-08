@@ -134,10 +134,18 @@ impl Resolver {
             let path = basedir.as_path().join(target);
             return self.resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path))
-                .map(|p| normalize_path(&p));
+                .and_then(|p| self.normalize(p));
         }
 
-        self.resolve_node_modules(&target).map(|p| normalize_path(&p))
+        self.resolve_node_modules(&target).and_then(|p| self.normalize(p))
+    }
+
+    fn normalize(&self, path: PathBuf) -> Result<PathBuf, ResolutionError> {
+        if self.preserve_symlinks {
+            Ok(normalize_path(&path))
+        } else {
+            path.canonicalize().map_err(|e| e.into())
+        }
     }
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
@@ -327,6 +335,26 @@ mod tests {
         assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from("dep", fixture("node-modules/package-json")).unwrap());
         assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from("not-ok", fixture("node-modules/walk/src")).unwrap());
         assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from("ok", fixture("node-modules/walk/src")).unwrap());
+    }
+
+    #[test]
+    fn preserves_symlinks() {
+        assert_eq!(fixture("symlink/node_modules/dep/main.js"),
+            ::Resolver::new()
+                   .preserve_symlinks(true)
+                   .with_basedir(fixture("symlink"))
+                   .resolve("dep").unwrap()
+       );
+    }
+
+    #[test]
+    fn does_not_preserve_symlinks() {
+        assert_eq!(fixture("symlink/linked/main.js"),
+            ::Resolver::new()
+                   .preserve_symlinks(false)
+                   .with_basedir(fixture("symlink"))
+                   .resolve("dep").unwrap()
+       );
     }
 
     #[test]
