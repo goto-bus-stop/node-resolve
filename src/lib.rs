@@ -114,7 +114,7 @@ impl Resolver {
     /// Resolve a `require()` argument.
     pub fn resolve(&self, target: &str) -> Result<PathBuf, ResolutionError> {
         // 1. If X is a core module
-        if is_core_module(&target) {
+        if is_core_module(target) {
             // 1.a. Return the core module
             return Ok(PathBuf::from(target));
         }
@@ -137,7 +137,7 @@ impl Resolver {
                 .and_then(|p| self.normalize(p));
         }
 
-        self.resolve_node_modules(&target).and_then(|p| self.normalize(p))
+        self.resolve_node_modules(target).and_then(|p| self.normalize(p))
     }
 
     fn normalize(&self, path: PathBuf) -> Result<PathBuf, ResolutionError> {
