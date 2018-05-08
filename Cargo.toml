@@ -1,6 +1,6 @@
 [package]
 name = "node-resolve"
-version = "2.0.0"
+version = "2.1.0"
 description = "The Node.js module resolution algorithm"
 authors = ["Renée Kooi <renee@kooi.me>"]
 repository = "https://github.com/goto-bus-stop/node-resolve"

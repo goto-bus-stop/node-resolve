@@ -16,7 +16,7 @@ Add to your Cargo.toml:
 
 ```toml
 [dependencies]
-node-resolve = "2.0.0"
+node-resolve = "2.1.0"
 ```
 
 ## Usage
