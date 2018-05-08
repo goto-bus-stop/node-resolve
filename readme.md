@@ -6,7 +6,6 @@ Rust implementation of the [Node.js module resolution algorithm](https://nodejs.
 
 Missing features:
 
- - [ ] --preserve-symlinks (currently always preserves symlinks, unlike Node)
  - [ ] async?
  - [ ] maybe more
 
