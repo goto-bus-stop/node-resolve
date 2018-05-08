@@ -15,7 +15,7 @@ extern crate node_builtins;
 use std::fmt;
 use std::fs::File;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf, Component as PathComponent};
 use serde_json::Value;
 use node_builtins::BUILTINS;
 
@@ -133,10 +133,19 @@ impl Resolver {
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
             let path = basedir.as_path().join(target);
             return self.resolve_as_file(&path)
-                .or_else(|_| self.resolve_as_directory(&path));
+                .or_else(|_| self.resolve_as_directory(&path))
+                .and_then(|p| self.normalize(p));
         }
 
-        self.resolve_node_modules(&target)
+        self.resolve_node_modules(&target).and_then(|p| self.normalize(p))
+    }
+
+    fn normalize(&self, path: PathBuf) -> Result<PathBuf, ResolutionError> {
+        if self.preserve_symlinks {
+            Ok(normalize_path(&path))
+        } else {
+            path.canonicalize().map_err(|e| e.into())
+        }
     }
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
@@ -233,6 +242,30 @@ impl Resolver {
     }
 }
 
+fn normalize_path(p: &Path) -> PathBuf {
+    let mut normalized = PathBuf::from("/");
+    for part in p.components() {
+        match part {
+            PathComponent::Prefix(ref prefix) => {
+                normalized.push(prefix.as_os_str());
+            },
+            PathComponent::RootDir => {
+                normalized.push("/");
+            },
+            PathComponent::ParentDir => {
+                normalized.pop();
+            },
+            PathComponent::CurDir => {
+                // Nothing
+            },
+            PathComponent::Normal(ref name) => {
+                normalized.push(name);
+            },
+        }
+    }
+    normalized
+}
+
 /// Check if a string references a core module, such as "events".
 pub fn is_core_module(target: &str) -> bool {
     BUILTINS.iter().any(|builtin| builtin == &target)
@@ -302,6 +335,26 @@ mod tests {
         assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from("dep", fixture("node-modules/package-json")).unwrap());
         assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from("not-ok", fixture("node-modules/walk/src")).unwrap());
         assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from("ok", fixture("node-modules/walk/src")).unwrap());
+    }
+
+    #[test]
+    fn preserves_symlinks() {
+        assert_eq!(fixture("symlink/node_modules/dep/main.js"),
+            ::Resolver::new()
+                   .preserve_symlinks(true)
+                   .with_basedir(fixture("symlink"))
+                   .resolve("dep").unwrap()
+       );
+    }
+
+    #[test]
+    fn does_not_preserve_symlinks() {
+        assert_eq!(fixture("symlink/linked/main.js"),
+            ::Resolver::new()
+                   .preserve_symlinks(false)
+                   .with_basedir(fixture("symlink"))
+                   .resolve("dep").unwrap()
+       );
     }
 
     #[test]
