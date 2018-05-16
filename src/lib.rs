@@ -158,15 +158,16 @@ impl Resolver {
             let path = basedir.as_path().join(target);
             return self.resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path))
-                .and_then(|p| self.normalize(p));
+                .and_then(|p| self.normalize(&p));
         }
 
-        self.resolve_node_modules(target).and_then(|p| self.normalize(p))
+        self.resolve_node_modules(target)
+            .and_then(|p| self.normalize(&p))
     }
 
-    fn normalize(&self, path: PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn normalize(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
         if self.preserve_symlinks {
-            Ok(normalize_path(&path))
+            Ok(normalize_path(path))
         } else {
             path.canonicalize().map_err(|e| e.into())
         }
@@ -285,7 +286,7 @@ fn normalize_path(p: &Path) -> PathBuf {
             PathComponent::CurDir => {
                 // Nothing
             },
-            PathComponent::Normal(ref name) => {
+            PathComponent::Normal(name) => {
                 normalized.push(name);
             },
         }
