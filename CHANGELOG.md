@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 2.2.0
+* Add `with_main_fields()` to configure the package.json `"main"` field name.
+  ```rust
+  Resolver::new()
+    .with_main_fields(&["module", "main"])
+    .with_extensions(&[".js", ".mjs", ".json"])
+  ```
+* Implement `Default` for `Resolver`.
+
 ## 2.1.1
 * Exclude test symlink from the package so it can be published.
 
