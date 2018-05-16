@@ -85,7 +85,9 @@ impl Default for Resolver {
 }
 
 impl Resolver {
-    /// Create a new resolver with the given options.
+    /// Create a new resolver.
+    ///
+    /// A Resolver instance can be configured using the various `.with_*()` methods.
     pub fn new() -> Self {
         Resolver::default()
     }
@@ -100,6 +102,20 @@ impl Resolver {
     }
 
     /// Create a new resolver with a different set of extensions.
+    /// The default is `&[".js", ".json", ".node"]`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use node_resolve::Resolver;
+    ///
+    /// assert_eq!(Ok(PathBuf::from("./fixtures/module/index.mjs")),
+    ///     Resolver::new()
+    ///         .with_extensions(&[".mjs", ".js", ".json"])
+    ///         .with_basedir("./fixtures")
+    ///         .resolve("./module")
+    /// );
+    /// ```
     pub fn with_extensions<T>(&self, extensions: T) -> Self
         where T: IntoIterator,
               T::Item: ToString
@@ -118,6 +134,21 @@ impl Resolver {
     }
 
     /// Create a new resolver with a different set of main fields.
+    /// The default is `&["main"]`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use node_resolve::Resolver;
+    ///
+    /// assert_eq!(Ok(PathBuf::from("./fixtures/module-main/main.mjs"),
+    ///     Resolver::new()
+    ///         .with_extensions(&[".mjs", ".js", ".json"])
+    ///         .with_main_fields(&["module", "main"])
+    ///         .with_basedir("./fixtures")
+    ///         .resolve("./module-main")
+    /// );
+    /// ```
     pub fn with_main_fields<T>(&self, main_fields: T) -> Self
         where T: IntoIterator,
               T::Item: ToString
@@ -131,6 +162,31 @@ impl Resolver {
     }
 
     /// Create a new resolver with a different symlink option.
+    ///
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use node_resolve::Resolver;
+    ///
+    /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/node_modules/dep/main.js").canonicalize()),
+    ///     ::Resolver::new()
+    ///            .preserve_symlinks(true)
+    ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
+    ///            .resolve("dep")
+    /// );
+    /// ```
+    ///
+    /// ```rust
+    /// use node_resolve::Resolver;
+    ///
+    /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/linked/main.js").canonicalize()),
+    ///     ::Resolver::new()
+    ///            .preserve_symlinks(false)
+    ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
+    ///            .resolve("dep")
+    /// };
+    /// ```
     pub fn preserve_symlinks(&self, preserve_symlinks: bool) -> Self {
         Resolver { preserve_symlinks, ..self.clone() }
     }
