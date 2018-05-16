@@ -23,8 +23,11 @@ use node_builtins::BUILTINS;
 
 #[derive(Debug)]
 pub enum Error {
+    /// Failed to parse a package.json file.
     JSONError(serde_json::Error),
+    /// Could not read a file.
     IOError(IOError),
+    /// Something else went wrong.
     ResolutionError(ResolutionError),
 }
 
