@@ -316,6 +316,14 @@ mod tests {
         assert_eq!(fixture("extensions/native-file.node"), resolve_fixture("./extensions/native-file"));
         assert_eq!(fixture("extensions/other-file.ext"), resolve_fixture("./extensions/other-file.ext"));
         assert_eq!(fixture("extensions/no-ext"), resolve_fixture("./extensions/no-ext"));
+        assert_eq!(fixture("extensions/other-file.ext"), ::Resolver::new()
+                   .with_extensions(&[".ext"])
+                   .with_basedir(fixture(""))
+                   .resolve("./extensions/other-file").unwrap());
+        assert_eq!(fixture("extensions/module.mjs"), ::Resolver::new()
+                   .with_extensions(&[".mjs"])
+                   .with_basedir(fixture(""))
+                   .resolve("./extensions/module").unwrap());
     }
 
     #[test]
@@ -367,6 +375,7 @@ mod tests {
     #[test]
     fn core_modules() {
         assert!(::is_core_module("events"));
+        assert!(!::is_core_module("events/"));
         assert!(!::is_core_module("./events"));
         assert!(::is_core_module("stream"));
         assert!(!::is_core_module("acorn"));
