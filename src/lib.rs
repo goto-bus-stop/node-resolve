@@ -63,6 +63,7 @@ pub struct Resolver {
     basedir: Option<PathBuf>,
     extensions: Vec<String>,
     preserve_symlinks: bool,
+    main_fields: Vec<String>,
 }
 
 impl Resolver {
@@ -76,6 +77,9 @@ impl Resolver {
                 String::from(".node"),
             ],
             preserve_symlinks: false,
+            main_fields: vec![
+                String::from("main"),
+            ],
         }
     }
 
@@ -101,6 +105,19 @@ impl Resolver {
                 } else {
                     format!(".{}", ext)
                 })
+                .collect(),
+            ..self.clone()
+        }
+    }
+
+    /// Create a new resolver with a different set of main fields.
+    pub fn with_main_fields<T>(&self, main_fields: T) -> Self
+        where T: IntoIterator,
+              T::Item: ToString
+    {
+        Resolver {
+            main_fields: main_fields.into_iter()
+                .map(|field| field.to_string())
                 .collect(),
             ..self.clone()
         }
@@ -197,7 +214,10 @@ impl Resolver {
             return Err(ResolutionError::new("package.json is not an object"));
         }
 
-        match pkg["main"].as_str() {
+        let main_field = self.main_fields.iter()
+            .find(|name| pkg[name].is_string())
+            .and_then(|name| pkg[name].as_str());
+        match main_field {
             Some(target) => {
                 let path = pkg_dir.join(target);
                 self.resolve_as_file(&path)
@@ -334,6 +354,21 @@ mod tests {
         assert_eq!(fixture("package-json/not-object/index.js"), resolve_fixture("./package-json/not-object"));
         assert_eq!(fixture("package-json/invalid/index.js"), resolve_fixture("./package-json/invalid"));
         assert_eq!(fixture("package-json/main-none/index.js"), resolve_fixture("./package-json/main-none"));
+        assert_eq!(fixture("package-json/main-file/whatever.js"), ::Resolver::new()
+                   .with_main_fields(&["module", "main"])
+                   .with_basedir(fixture(""))
+                   .resolve("./package-json/main-file").unwrap());
+        assert_eq!(fixture("package-json/module/index.mjs"), ::Resolver::new()
+                   .with_extensions(&[".mjs", ".js"])
+                   .with_main_fields(&["module", "main"])
+                   .with_basedir(fixture(""))
+                   .resolve("./package-json/module").unwrap());
+        assert_eq!(fixture("package-json/module-main/main.mjs"), ::Resolver::new()
+                   .with_extensions(&[".mjs", ".js"])
+                   .with_main_fields(&["module", "main"])
+                   .with_basedir(fixture(""))
+                   .resolve("./package-json/module-main").unwrap());
+
     }
 
     #[test]
