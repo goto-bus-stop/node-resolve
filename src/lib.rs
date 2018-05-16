@@ -15,6 +15,7 @@ extern crate node_builtins;
 use std::fmt;
 use std::fs::File;
 use std::error::Error;
+use std::default::Default;
 use std::path::{Path, PathBuf, Component as PathComponent};
 use serde_json::Value;
 use node_builtins::BUILTINS;
@@ -66,9 +67,8 @@ pub struct Resolver {
     main_fields: Vec<String>,
 }
 
-impl Resolver {
-    /// Create a new resolver with the given options.
-    pub fn new() -> Self {
+impl Default for Resolver {
+    fn default() -> Resolver {
         Resolver {
             basedir: None,
             extensions: vec![
@@ -81,6 +81,13 @@ impl Resolver {
                 String::from("main"),
             ],
         }
+    }
+}
+
+impl Resolver {
+    /// Create a new resolver with the given options.
+    pub fn new() -> Self {
+        Resolver::default()
     }
 
     fn get_basedir(&self) -> Result<&PathBuf, ResolutionError> {
