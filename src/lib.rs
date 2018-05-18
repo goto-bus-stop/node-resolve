@@ -221,6 +221,8 @@ impl Resolver {
             .and_then(|p| self.normalize(&p))
     }
 
+    /// Normalize a path to a module. If symlinks should be preserved, this only removes
+    /// unnecessary `./`s and `../`s from the path. Else it does `realpath()`.
     fn normalize(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
         if self.preserve_symlinks {
             Ok(normalize_path(path))
@@ -326,6 +328,7 @@ impl Resolver {
     }
 }
 
+/// Remove excess components like `/./` and `/../` from a `Path`.
 fn normalize_path(p: &Path) -> PathBuf {
     let mut normalized = PathBuf::from("/");
     for part in p.components() {
