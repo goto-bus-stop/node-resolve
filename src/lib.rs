@@ -27,6 +27,8 @@ pub enum Error {
     JSONError(serde_json::Error),
     /// Could not read a file.
     IOError(IOError),
+    /// A Basedir was not configured.
+    UnconfiguredBasedir,
     /// Something else went wrong.
     ResolutionError(ResolutionError),
 }
@@ -108,7 +110,7 @@ impl Resolver {
     }
 
     fn get_basedir(&self) -> Result<&PathBuf, Error> {
-        self.basedir.as_ref().ok_or_else(|| ResolutionError::new("Must set a basedir before resolving").into())
+        self.basedir.as_ref().ok_or_else(|| Error::UnconfiguredBasedir)
     }
 
     /// Create a new resolver with a different basedir.
