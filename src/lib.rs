@@ -273,12 +273,16 @@ impl Resolver {
     /// Resolve a path as a directory, using the "main" key from a package.json file if it
     /// exists, or resolving to the index.EXT file if it exists.
     fn resolve_as_directory(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+        if !path.is_dir() {
+            return Err(IOError::new(IOErrorKind::NotFound, "Not Found").into());
+        }
+
         // 1. If X/package.json is a file, use it.
         let pkg_path = path.join("package.json");
         if pkg_path.is_file() {
             let main = self.resolve_package_main(&pkg_path);
             if main.is_ok() {
-                return main
+                return main;
             }
         }
 
