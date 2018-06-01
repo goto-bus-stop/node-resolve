@@ -18,6 +18,7 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use std::error::Error as StdError;
 use std::default::Default;
 use std::path::{Path, PathBuf, Component as PathComponent};
+use std::rc::Rc;
 use serde_json::Value;
 use node_builtins::BUILTINS;
 
@@ -79,24 +80,24 @@ impl StdError for ResolutionError {
 #[derive(Clone)]
 pub struct Resolver {
     basedir: Option<PathBuf>,
-    extensions: Vec<String>,
+    extensions: Rc<Vec<String>>, // Rc so the vec doesn't need to be cloned
     preserve_symlinks: bool,
-    main_fields: Vec<String>,
+    main_fields: Rc<Vec<String>>,
 }
 
 impl Default for Resolver {
     fn default() -> Resolver {
         Resolver {
             basedir: None,
-            extensions: vec![
+            extensions: Rc::new(vec![
                 String::from(".js"),
                 String::from(".json"),
                 String::from(".node"),
-            ],
+            ]),
             preserve_symlinks: false,
-            main_fields: vec![
+            main_fields: Rc::new(vec![
                 String::from("main"),
-            ],
+            ]),
         }
     }
 }
@@ -104,7 +105,7 @@ impl Default for Resolver {
 impl Resolver {
     /// Create a new resolver.
     ///
-    /// A Resolver instance can be configured using the various `.with_*()` methods.
+    /// A Resolver instance can be configured using the various methods below.
     pub fn new() -> Self {
         Resolver::default()
     }
@@ -118,7 +119,7 @@ impl Resolver {
         Resolver { basedir: Some(basedir), ..self.clone() }
     }
 
-    /// Create a new resolver with a different set of extensions.
+    /// Use a different set of extensions. Consumes the Resolver instance.
     /// The default is `&[".js", ".json", ".node"]`.
     ///
     /// # Examples
@@ -128,29 +129,22 @@ impl Resolver {
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/module/index.mjs")),
     ///     Resolver::new()
-    ///         .with_extensions(&[".mjs", ".js", ".json"])
+    ///         .extensions(&[".mjs", ".js", ".json"])
     ///         .with_basedir("./fixtures")
     ///         .resolve("./module")
     /// );
     /// ```
-    pub fn with_extensions<T>(&self, extensions: T) -> Self
+    pub fn extensions<T>(self, extensions: T) -> Self
         where T: IntoIterator,
               T::Item: ToString
     {
         Resolver {
-            extensions: extensions.into_iter()
-                .map(|ext| ext.to_string())
-                .map(|ext| if ext.starts_with('.') {
-                    ext
-                } else {
-                    format!(".{}", ext)
-                })
-                .collect(),
-            ..self.clone()
+            extensions: Rc::new(normalize_extensions(extensions)),
+            ..self
         }
     }
 
-    /// Create a new resolver with a different set of main fields.
+    /// Use a different set of main fields. Consumes the Resolver instance.
     /// The default is `&["main"]`.
     ///
     /// # Examples
@@ -160,26 +154,25 @@ impl Resolver {
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/module-main/main.mjs"),
     ///     Resolver::new()
-    ///         .with_extensions(&[".mjs", ".js", ".json"])
-    ///         .with_main_fields(&["module", "main"])
+    ///         .extensions(&[".mjs", ".js", ".json"])
+    ///         .main_fields(&["module", "main"])
     ///         .with_basedir("./fixtures")
     ///         .resolve("./module-main")
     /// );
     /// ```
-    pub fn with_main_fields<T>(&self, main_fields: T) -> Self
+    pub fn main_fields<T>(self, main_fields: T) -> Self
         where T: IntoIterator,
               T::Item: ToString
     {
         Resolver {
-            main_fields: main_fields.into_iter()
+            main_fields: Rc::new(main_fields.into_iter()
                 .map(|field| field.to_string())
-                .collect(),
-            ..self.clone()
+                .collect()),
+            ..self
         }
     }
 
-    /// Create a new resolver with a different symlink option.
-    ///
+    /// Configure whether symlinks should be preserved. Consumes the Resolver instance.
     ///
     /// # Examples
     ///
@@ -204,11 +197,11 @@ impl Resolver {
     ///            .resolve("dep")
     /// };
     /// ```
-    pub fn preserve_symlinks(&self, preserve_symlinks: bool) -> Self {
-        Resolver { preserve_symlinks, ..self.clone() }
+    pub fn preserve_symlinks(self, preserve_symlinks: bool) -> Self {
+        Resolver { preserve_symlinks, ..self }
     }
 
-    /// Resolve a `require()` argument.
+    /// Resolve a `require('target')` argument.
     pub fn resolve(&self, target: &str) -> Result<PathBuf, Error> {
         // 1. If X is a core module
         if is_core_module(target) {
@@ -260,7 +253,7 @@ impl Resolver {
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
         let str_path = path.to_str().ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
-        for ext in &self.extensions {
+        for ext in self.extensions.iter() {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
@@ -319,7 +312,7 @@ impl Resolver {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
-        for ext in &self.extensions {
+        for ext in self.extensions.iter() {
             let ext_path = path.join(format!("index{}", ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
@@ -374,6 +367,20 @@ fn normalize_path(p: &Path) -> PathBuf {
     normalized
 }
 
+fn normalize_extensions<T>(extensions: T) -> Vec<String>
+    where T: IntoIterator,
+          T::Item: ToString
+{
+    extensions.into_iter()
+        .map(|ext| ext.to_string())
+        .map(|ext| if ext.starts_with('.') {
+            ext
+        } else {
+            format!(".{}", ext)
+        })
+        .collect()
+}
+
 /// Check if a string references a core module, such as "events".
 pub fn is_core_module(target: &str) -> bool {
     BUILTINS.iter().any(|builtin| builtin == &target)
@@ -425,11 +432,11 @@ mod tests {
         assert_eq!(fixture("extensions/other-file.ext"), resolve_fixture("./extensions/other-file.ext"));
         assert_eq!(fixture("extensions/no-ext"), resolve_fixture("./extensions/no-ext"));
         assert_eq!(fixture("extensions/other-file.ext"), ::Resolver::new()
-                   .with_extensions(&[".ext"])
+                   .extensions(&[".ext"])
                    .with_basedir(fixture(""))
                    .resolve("./extensions/other-file").unwrap());
         assert_eq!(fixture("extensions/module.mjs"), ::Resolver::new()
-                   .with_extensions(&[".mjs"])
+                   .extensions(&[".mjs"])
                    .with_basedir(fixture(""))
                    .resolve("./extensions/module").unwrap());
     }
@@ -443,17 +450,17 @@ mod tests {
         assert_eq!(fixture("package-json/invalid/index.js"), resolve_fixture("./package-json/invalid"));
         assert_eq!(fixture("package-json/main-none/index.js"), resolve_fixture("./package-json/main-none"));
         assert_eq!(fixture("package-json/main-file/whatever.js"), ::Resolver::new()
-                   .with_main_fields(&["module", "main"])
+                   .main_fields(&["module", "main"])
                    .with_basedir(fixture(""))
                    .resolve("./package-json/main-file").unwrap());
         assert_eq!(fixture("package-json/module/index.mjs"), ::Resolver::new()
-                   .with_extensions(&[".mjs", ".js"])
-                   .with_main_fields(&["module", "main"])
+                   .extensions(&[".mjs", ".js"])
+                   .main_fields(&["module", "main"])
                    .with_basedir(fixture(""))
                    .resolve("./package-json/module").unwrap());
         assert_eq!(fixture("package-json/module-main/main.mjs"), ::Resolver::new()
-                   .with_extensions(&[".mjs", ".js"])
-                   .with_main_fields(&["module", "main"])
+                   .extensions(&[".mjs", ".js"])
+                   .main_fields(&["module", "main"])
                    .with_basedir(fixture(""))
                    .resolve("./package-json/module-main").unwrap());
 
