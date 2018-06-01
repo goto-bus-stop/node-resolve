@@ -18,6 +18,7 @@ use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use std::error::Error as StdError;
 use std::default::Default;
 use std::path::{Path, PathBuf, Component as PathComponent};
+use std::rc::Rc;
 use serde_json::Value;
 use node_builtins::BUILTINS;
 
@@ -79,24 +80,24 @@ impl StdError for ResolutionError {
 #[derive(Clone)]
 pub struct Resolver {
     basedir: Option<PathBuf>,
-    extensions: Vec<String>,
+    extensions: Rc<Vec<String>>, // Rc so the vec doesn't need to be cloned
     preserve_symlinks: bool,
-    main_fields: Vec<String>,
+    main_fields: Rc<Vec<String>>,
 }
 
 impl Default for Resolver {
     fn default() -> Resolver {
         Resolver {
             basedir: None,
-            extensions: vec![
+            extensions: Rc::new(vec![
                 String::from(".js"),
                 String::from(".json"),
                 String::from(".node"),
-            ],
+            ]),
             preserve_symlinks: false,
-            main_fields: vec![
+            main_fields: Rc::new(vec![
                 String::from("main"),
-            ],
+            ]),
         }
     }
 }
@@ -138,7 +139,7 @@ impl Resolver {
               T::Item: ToString
     {
         Resolver {
-            extensions: normalize_extensions(extensions),
+            extensions: Rc::new(normalize_extensions(extensions)),
             ..self
         }
     }
@@ -164,9 +165,9 @@ impl Resolver {
               T::Item: ToString
     {
         Resolver {
-            main_fields: main_fields.into_iter()
+            main_fields: Rc::new(main_fields.into_iter()
                 .map(|field| field.to_string())
-                .collect(),
+                .collect()),
             ..self
         }
     }
@@ -252,7 +253,7 @@ impl Resolver {
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
         let str_path = path.to_str().ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
-        for ext in &self.extensions {
+        for ext in self.extensions.iter() {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
@@ -311,7 +312,7 @@ impl Resolver {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
-        for ext in &self.extensions {
+        for ext in self.extensions.iter() {
             let ext_path = path.join(format!("index{}", ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
