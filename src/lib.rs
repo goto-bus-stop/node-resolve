@@ -14,32 +14,49 @@ extern crate node_builtins;
 
 use std::fmt;
 use std::fs::File;
-use std::error::Error;
+use std::io::{Error as IOError, ErrorKind as IOErrorKind};
+use std::error::Error as StdError;
 use std::default::Default;
 use std::path::{Path, PathBuf, Component as PathComponent};
 use serde_json::Value;
 use node_builtins::BUILTINS;
 
+#[derive(Debug)]
+pub enum Error {
+    /// Failed to parse a package.json file.
+    JSONError(serde_json::Error),
+    /// Could not read a file.
+    IOError(IOError),
+    /// A Basedir was not configured.
+    UnconfiguredBasedir,
+    /// Something else went wrong.
+    ResolutionError(ResolutionError),
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Error {
+        Error::JSONError(err)
+    }
+}
+impl From<IOError> for Error {
+    fn from(err: IOError) -> Error {
+        Error::IOError(err)
+    }
+}
+impl From<ResolutionError> for Error {
+    fn from(err: ResolutionError) -> Error {
+        Error::ResolutionError(err)
+    }
+}
+
 /// An Error, returned when the module could not be resolved.
 #[derive(Debug)]
 pub struct ResolutionError {
-    description: String
+    description: String,
 }
 impl ResolutionError {
     fn new(description: &str) -> Self {
         ResolutionError { description: String::from(description) }
-    }
-}
-
-impl From<serde_json::Error> for ResolutionError {
-    fn from(_error: serde_json::Error) -> Self {
-        ResolutionError::new("Json parse error")
-    }
-}
-
-impl From<std::io::Error> for ResolutionError {
-    fn from(_error: std::io::Error) -> Self {
-        ResolutionError::new("Io error")
     }
 }
 
@@ -49,11 +66,11 @@ impl fmt::Display for ResolutionError {
     }
 }
 
-impl Error for ResolutionError {
+impl StdError for ResolutionError {
     fn description(&self) -> &str {
         self.description.as_str()
     }
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&StdError> {
         None
     }
 }
@@ -92,8 +109,8 @@ impl Resolver {
         Resolver::default()
     }
 
-    fn get_basedir(&self) -> Result<&PathBuf, ResolutionError> {
-        self.basedir.as_ref().ok_or_else(|| ResolutionError::new("Must set a basedir before resolving"))
+    fn get_basedir(&self) -> Result<&PathBuf, Error> {
+        self.basedir.as_ref().ok_or_else(|| Error::UnconfiguredBasedir)
     }
 
     /// Create a new resolver with a different basedir.
@@ -192,7 +209,7 @@ impl Resolver {
     }
 
     /// Resolve a `require()` argument.
-    pub fn resolve(&self, target: &str) -> Result<PathBuf, ResolutionError> {
+    pub fn resolve(&self, target: &str) -> Result<PathBuf, Error> {
         // 1. If X is a core module
         if is_core_module(target) {
             // 1.a. Return the core module
@@ -223,7 +240,7 @@ impl Resolver {
 
     /// Normalize a path to a module. If symlinks should be preserved, this only removes
     /// unnecessary `./`s and `../`s from the path. Else it does `realpath()`.
-    fn normalize(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn normalize(&self, path: &PathBuf) -> Result<PathBuf, Error> {
         if self.preserve_symlinks {
             Ok(normalize_path(path))
         } else {
@@ -233,7 +250,7 @@ impl Resolver {
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
     /// otherwise the `path` + each extension is tried.
-    fn resolve_as_file(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn resolve_as_file(&self, path: &PathBuf) -> Result<PathBuf, Error> {
         // 1. If X is a file, load X as JavaScript text.
         if path.is_file() {
             return Ok(path.clone());
@@ -242,7 +259,7 @@ impl Resolver {
         // 1. If X.js is a file, load X.js as JavaScript text.
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
-        let str_path = path.to_str().ok_or_else(|| ResolutionError::new("Invalid path"))?;
+        let str_path = path.to_str().ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
         for ext in &self.extensions {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
@@ -250,18 +267,22 @@ impl Resolver {
             }
         }
 
-        Err(ResolutionError::new("Not found"))
+        Err(IOError::new(IOErrorKind::NotFound, "Not Found").into())
     }
 
     /// Resolve a path as a directory, using the "main" key from a package.json file if it
     /// exists, or resolving to the index.EXT file if it exists.
-    fn resolve_as_directory(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn resolve_as_directory(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+        if !path.is_dir() {
+            return Err(IOError::new(IOErrorKind::NotFound, "Not Found").into());
+        }
+
         // 1. If X/package.json is a file, use it.
         let pkg_path = path.join("package.json");
         if pkg_path.is_file() {
             let main = self.resolve_package_main(&pkg_path);
             if main.is_ok() {
-                return main
+                return main;
             }
         }
 
@@ -270,14 +291,14 @@ impl Resolver {
     }
 
     /// Resolve using the package.json "main" key.
-    fn resolve_package_main(&self, pkg_path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn resolve_package_main(&self, pkg_path: &PathBuf) -> Result<PathBuf, Error> {
         // TODO how to not always initialise this here?
         let root = PathBuf::from("/");
         let pkg_dir = pkg_path.parent().unwrap_or(&root);
         let file = File::open(pkg_path)?;
         let pkg: Value = serde_json::from_reader(file)?;
         if !pkg.is_object() {
-            return Err(ResolutionError::new("package.json is not an object"));
+            return Err(ResolutionError::new("package.json is not an object").into());
         }
 
         let main_field = self.main_fields.iter()
@@ -289,12 +310,12 @@ impl Resolver {
                 self.resolve_as_file(&path)
                     .or_else(|_| self.resolve_as_directory(&path))
             },
-            None => Err(ResolutionError::new("package.json does not contain a \"main\" string"))
+            None => Err(ResolutionError::new("package.json does not contain a \"main\" string").into())
         }
     }
 
     /// Resolve a directory to its index.EXT.
-    fn resolve_index(&self, path: &PathBuf) -> Result<PathBuf, ResolutionError> {
+    fn resolve_index(&self, path: &PathBuf) -> Result<PathBuf, Error> {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
@@ -305,11 +326,11 @@ impl Resolver {
             }
         }
 
-        Err(ResolutionError::new("Not found"))
+        Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found")))
     }
 
     /// Resolve by walking up node_modules folders.
-    fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, ResolutionError> {
+    fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, Error> {
         let basedir = self.get_basedir()?;
         let node_modules = basedir.join("node_modules");
         if node_modules.is_dir() {
@@ -323,7 +344,7 @@ impl Resolver {
 
         match basedir.parent() {
             Some(parent) => self.with_basedir(parent.to_path_buf()).resolve_node_modules(target),
-            None => Err(ResolutionError::new("Not found")),
+            None => Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found"))),
         }
     }
 }
@@ -367,7 +388,7 @@ pub fn is_core_module(target: &str) -> bool {
 ///     Err(err) => panic!("Failed: {:?}", err),
 /// }
 /// ```
-pub fn resolve(target: &str) -> Result<PathBuf, ResolutionError> {
+pub fn resolve(target: &str) -> Result<PathBuf, Error> {
     Resolver::new().with_basedir(PathBuf::from(".")).resolve(target)
 }
 
@@ -380,7 +401,7 @@ pub fn resolve(target: &str) -> Result<PathBuf, ResolutionError> {
 ///     Err(err) => panic!("Failed: {:?}", err),
 /// }
 /// ```
-pub fn resolve_from(target: &str, basedir: PathBuf) -> Result<PathBuf, ResolutionError> {
+pub fn resolve_from(target: &str, basedir: PathBuf) -> Result<PathBuf, Error> {
     Resolver::new().with_basedir(basedir).resolve(target)
 }
 
