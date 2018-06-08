@@ -147,6 +147,11 @@ impl Resolver {
     /// Use a different set of main fields. Consumes the Resolver instance.
     /// The default is `&["main"]`.
     ///
+    /// Main fields are used to determine the entry point of a folder with a
+    /// `package.json` file. Each main field is tried in order, and the value
+    /// of the first one that exists is used as the path to the entry point of
+    /// the folder.
+    ///
     /// # Examples
     ///
     /// ```rust
