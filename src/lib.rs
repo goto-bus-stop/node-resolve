@@ -9,18 +9,18 @@
 //! // → Ok("/other/path/node_modules/abc/index.js")
 //! ```
 
-extern crate serde_json;
 extern crate node_builtins;
+extern crate serde_json;
 
+use node_builtins::BUILTINS;
+use serde_json::Value;
+use std::default::Default;
+use std::error::Error as StdError;
 use std::fmt;
 use std::fs::File;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
-use std::error::Error as StdError;
-use std::default::Default;
-use std::path::{Path, PathBuf, Component as PathComponent};
+use std::path::{Component as PathComponent, Path, PathBuf};
 use std::rc::Rc;
-use serde_json::Value;
-use node_builtins::BUILTINS;
 
 #[derive(Debug)]
 pub enum Error {
@@ -57,7 +57,9 @@ pub struct ResolutionError {
 }
 impl ResolutionError {
     fn new(description: &str) -> Self {
-        ResolutionError { description: String::from(description) }
+        ResolutionError {
+            description: String::from(description),
+        }
     }
 }
 
@@ -95,9 +97,7 @@ impl Default for Resolver {
                 String::from(".node"),
             ]),
             preserve_symlinks: false,
-            main_fields: Rc::new(vec![
-                String::from("main"),
-            ]),
+            main_fields: Rc::new(vec![String::from("main")]),
         }
     }
 }
@@ -111,12 +111,17 @@ impl Resolver {
     }
 
     fn get_basedir(&self) -> Result<&PathBuf, Error> {
-        self.basedir.as_ref().ok_or_else(|| Error::UnconfiguredBasedir)
+        self.basedir
+            .as_ref()
+            .ok_or_else(|| Error::UnconfiguredBasedir)
     }
 
     /// Create a new resolver with a different basedir.
     pub fn with_basedir(&self, basedir: PathBuf) -> Self {
-        Resolver { basedir: Some(basedir), ..self.clone() }
+        Resolver {
+            basedir: Some(basedir),
+            ..self.clone()
+        }
     }
 
     /// Use a different set of extensions. Consumes the Resolver instance.
@@ -135,8 +140,9 @@ impl Resolver {
     /// );
     /// ```
     pub fn extensions<T>(self, extensions: T) -> Self
-        where T: IntoIterator,
-              T::Item: ToString
+    where
+        T: IntoIterator,
+        T::Item: ToString,
     {
         Resolver {
             extensions: Rc::new(normalize_extensions(extensions)),
@@ -166,13 +172,17 @@ impl Resolver {
     /// );
     /// ```
     pub fn main_fields<T>(self, main_fields: T) -> Self
-        where T: IntoIterator,
-              T::Item: ToString
+    where
+        T: IntoIterator,
+        T::Item: ToString,
     {
         Resolver {
-            main_fields: Rc::new(main_fields.into_iter()
-                .map(|field| field.to_string())
-                .collect()),
+            main_fields: Rc::new(
+                main_fields
+                    .into_iter()
+                    .map(|field| field.to_string())
+                    .collect(),
+            ),
             ..self
         }
     }
@@ -185,7 +195,7 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/node_modules/dep/main.js").canonicalize()),
-    ///     ::Resolver::new()
+    ///     Resolver::new()
     ///            .preserve_symlinks(true)
     ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
     ///            .resolve("dep")
@@ -196,14 +206,17 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/linked/main.js").canonicalize()),
-    ///     ::Resolver::new()
+    ///     Resolver::new()
     ///            .preserve_symlinks(false)
     ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
     ///            .resolve("dep")
     /// };
     /// ```
     pub fn preserve_symlinks(self, preserve_symlinks: bool) -> Self {
-        Resolver { preserve_symlinks, ..self }
+        Resolver {
+            preserve_symlinks,
+            ..self
+        }
     }
 
     /// Resolve a `require('target')` argument.
@@ -227,7 +240,8 @@ impl Resolver {
         // 3. If X begins with './' or '/' or '../'
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
             let path = basedir.as_path().join(target);
-            return self.resolve_as_file(&path)
+            return self
+                .resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path))
                 .and_then(|p| self.normalize(&p));
         }
@@ -257,7 +271,9 @@ impl Resolver {
         // 1. If X.js is a file, load X.js as JavaScript text.
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
-        let str_path = path.to_str().ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
+        let str_path = path
+            .to_str()
+            .ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
         for ext in self.extensions.iter() {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
@@ -299,7 +315,9 @@ impl Resolver {
             return Err(ResolutionError::new("package.json is not an object").into());
         }
 
-        let main_field = self.main_fields.iter()
+        let main_field = self
+            .main_fields
+            .iter()
             .find(|name| pkg[name].is_string())
             .and_then(|name| pkg[name].as_str());
         match main_field {
@@ -307,8 +325,10 @@ impl Resolver {
                 let path = pkg_dir.join(target);
                 self.resolve_as_file(&path)
                     .or_else(|_| self.resolve_as_directory(&path))
-            },
-            None => Err(ResolutionError::new("package.json does not contain a \"main\" string").into())
+            }
+            None => {
+                Err(ResolutionError::new("package.json does not contain a \"main\" string").into())
+            }
         }
     }
 
@@ -324,7 +344,10 @@ impl Resolver {
             }
         }
 
-        Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found")))
+        Err(Error::IOError(IOError::new(
+            IOErrorKind::NotFound,
+            "Not Found",
+        )))
     }
 
     /// Resolve by walking up node_modules folders.
@@ -333,16 +356,22 @@ impl Resolver {
         let node_modules = basedir.join("node_modules");
         if node_modules.is_dir() {
             let path = node_modules.join(target);
-            let result = self.resolve_as_file(&path)
+            let result = self
+                .resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path));
             if result.is_ok() {
-                return result
+                return result;
             }
         }
 
         match basedir.parent() {
-            Some(parent) => self.with_basedir(parent.to_path_buf()).resolve_node_modules(target),
-            None => Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found"))),
+            Some(parent) => self
+                .with_basedir(parent.to_path_buf())
+                .resolve_node_modules(target),
+            None => Err(Error::IOError(IOError::new(
+                IOErrorKind::NotFound,
+                "Not Found",
+            ))),
         }
     }
 }
@@ -354,34 +383,38 @@ fn normalize_path(p: &Path) -> PathBuf {
         match part {
             PathComponent::Prefix(ref prefix) => {
                 normalized.push(prefix.as_os_str());
-            },
+            }
             PathComponent::RootDir => {
                 normalized.push("/");
-            },
+            }
             PathComponent::ParentDir => {
                 normalized.pop();
-            },
+            }
             PathComponent::CurDir => {
                 // Nothing
-            },
+            }
             PathComponent::Normal(name) => {
                 normalized.push(name);
-            },
+            }
         }
     }
     normalized
 }
 
 fn normalize_extensions<T>(extensions: T) -> Vec<String>
-    where T: IntoIterator,
-          T::Item: ToString
+where
+    T: IntoIterator,
+    T::Item: ToString,
 {
-    extensions.into_iter()
+    extensions
+        .into_iter()
         .map(|ext| ext.to_string())
-        .map(|ext| if ext.starts_with('.') {
-            ext
-        } else {
-            format!(".{}", ext)
+        .map(|ext| {
+            if ext.starts_with('.') {
+                ext
+            } else {
+                format!(".{}", ext)
+            }
         })
         .collect()
 }
@@ -401,7 +434,9 @@ pub fn is_core_module(target: &str) -> bool {
 /// }
 /// ```
 pub fn resolve(target: &str) -> Result<PathBuf, Error> {
-    Resolver::new().with_basedir(PathBuf::from(".")).resolve(target)
+    Resolver::new()
+        .with_basedir(PathBuf::from("."))
+        .resolve(target)
 }
 
 /// Resolve a node.js module path relative to `basedir`.
@@ -421,90 +456,162 @@ pub fn resolve_from(target: &str, basedir: PathBuf) -> Result<PathBuf, Error> {
 mod tests {
     use std::env;
     use std::path::PathBuf;
+    use super::*;
 
     fn fixture(part: &str) -> PathBuf {
         env::current_dir().unwrap().join("fixtures").join(part)
     }
     fn resolve_fixture(target: &str) -> PathBuf {
-        ::resolve_from(target, fixture("")).unwrap()
+        resolve_from(target, fixture("")).unwrap()
     }
 
     #[test]
     fn appends_extensions() {
-        assert_eq!(fixture("extensions/js-file.js"), resolve_fixture("./extensions/js-file"));
-        assert_eq!(fixture("extensions/json-file.json"), resolve_fixture("./extensions/json-file"));
-        assert_eq!(fixture("extensions/native-file.node"), resolve_fixture("./extensions/native-file"));
-        assert_eq!(fixture("extensions/other-file.ext"), resolve_fixture("./extensions/other-file.ext"));
-        assert_eq!(fixture("extensions/no-ext"), resolve_fixture("./extensions/no-ext"));
-        assert_eq!(fixture("extensions/other-file.ext"), ::Resolver::new()
-                   .extensions(&[".ext"])
-                   .with_basedir(fixture(""))
-                   .resolve("./extensions/other-file").unwrap());
-        assert_eq!(fixture("extensions/module.mjs"), ::Resolver::new()
-                   .extensions(&[".mjs"])
-                   .with_basedir(fixture(""))
-                   .resolve("./extensions/module").unwrap());
+        assert_eq!(
+            fixture("extensions/js-file.js"),
+            resolve_fixture("./extensions/js-file")
+        );
+        assert_eq!(
+            fixture("extensions/json-file.json"),
+            resolve_fixture("./extensions/json-file")
+        );
+        assert_eq!(
+            fixture("extensions/native-file.node"),
+            resolve_fixture("./extensions/native-file")
+        );
+        assert_eq!(
+            fixture("extensions/other-file.ext"),
+            resolve_fixture("./extensions/other-file.ext")
+        );
+        assert_eq!(
+            fixture("extensions/no-ext"),
+            resolve_fixture("./extensions/no-ext")
+        );
+        assert_eq!(
+            fixture("extensions/other-file.ext"),
+            Resolver::new()
+                .extensions(&[".ext"])
+                .with_basedir(fixture(""))
+                .resolve("./extensions/other-file")
+                .unwrap()
+        );
+        assert_eq!(
+            fixture("extensions/module.mjs"),
+            Resolver::new()
+                .extensions(&[".mjs"])
+                .with_basedir(fixture(""))
+                .resolve("./extensions/module")
+                .unwrap()
+        );
     }
 
     #[test]
     fn resolves_package_json() {
-        assert_eq!(fixture("package-json/main-file/whatever.js"), resolve_fixture("./package-json/main-file"));
-        assert_eq!(fixture("package-json/main-file-noext/whatever.js"), resolve_fixture("./package-json/main-file-noext"));
-        assert_eq!(fixture("package-json/main-dir/subdir/index.js"), resolve_fixture("./package-json/main-dir"));
-        assert_eq!(fixture("package-json/not-object/index.js"), resolve_fixture("./package-json/not-object"));
-        assert_eq!(fixture("package-json/invalid/index.js"), resolve_fixture("./package-json/invalid"));
-        assert_eq!(fixture("package-json/main-none/index.js"), resolve_fixture("./package-json/main-none"));
-        assert_eq!(fixture("package-json/main-file/whatever.js"), ::Resolver::new()
-                   .main_fields(&["module", "main"])
-                   .with_basedir(fixture(""))
-                   .resolve("./package-json/main-file").unwrap());
-        assert_eq!(fixture("package-json/module/index.mjs"), ::Resolver::new()
-                   .extensions(&[".mjs", ".js"])
-                   .main_fields(&["module", "main"])
-                   .with_basedir(fixture(""))
-                   .resolve("./package-json/module").unwrap());
-        assert_eq!(fixture("package-json/module-main/main.mjs"), ::Resolver::new()
-                   .extensions(&[".mjs", ".js"])
-                   .main_fields(&["module", "main"])
-                   .with_basedir(fixture(""))
-                   .resolve("./package-json/module-main").unwrap());
-
+        assert_eq!(
+            fixture("package-json/main-file/whatever.js"),
+            resolve_fixture("./package-json/main-file")
+        );
+        assert_eq!(
+            fixture("package-json/main-file-noext/whatever.js"),
+            resolve_fixture("./package-json/main-file-noext")
+        );
+        assert_eq!(
+            fixture("package-json/main-dir/subdir/index.js"),
+            resolve_fixture("./package-json/main-dir")
+        );
+        assert_eq!(
+            fixture("package-json/not-object/index.js"),
+            resolve_fixture("./package-json/not-object")
+        );
+        assert_eq!(
+            fixture("package-json/invalid/index.js"),
+            resolve_fixture("./package-json/invalid")
+        );
+        assert_eq!(
+            fixture("package-json/main-none/index.js"),
+            resolve_fixture("./package-json/main-none")
+        );
+        assert_eq!(
+            fixture("package-json/main-file/whatever.js"),
+            Resolver::new()
+                .main_fields(&["module", "main"])
+                .with_basedir(fixture(""))
+                .resolve("./package-json/main-file")
+                .unwrap()
+        );
+        assert_eq!(
+            fixture("package-json/module/index.mjs"),
+            Resolver::new()
+                .extensions(&[".mjs", ".js"])
+                .main_fields(&["module", "main"])
+                .with_basedir(fixture(""))
+                .resolve("./package-json/module")
+                .unwrap()
+        );
+        assert_eq!(
+            fixture("package-json/module-main/main.mjs"),
+            Resolver::new()
+                .extensions(&[".mjs", ".js"])
+                .main_fields(&["module", "main"])
+                .with_basedir(fixture(""))
+                .resolve("./package-json/module-main")
+                .unwrap()
+        );
     }
 
     #[test]
     fn resolves_node_modules() {
-        assert_eq!(fixture("node-modules/same-dir/node_modules/a.js"), ::resolve_from("a", fixture("node-modules/same-dir")).unwrap());
-        assert_eq!(fixture("node-modules/parent-dir/node_modules/a/index.js"), ::resolve_from("a", fixture("node-modules/parent-dir/src")).unwrap());
-        assert_eq!(fixture("node-modules/package-json/node_modules/dep/lib/index.js"), ::resolve_from("dep", fixture("node-modules/package-json")).unwrap());
-        assert_eq!(fixture("node-modules/walk/src/node_modules/not-ok/index.js"), ::resolve_from("not-ok", fixture("node-modules/walk/src")).unwrap());
-        assert_eq!(fixture("node-modules/walk/node_modules/ok/index.js"), ::resolve_from("ok", fixture("node-modules/walk/src")).unwrap());
+        assert_eq!(
+            fixture("node-modules/same-dir/node_modules/a.js"),
+            resolve_from("a", fixture("node-modules/same-dir")).unwrap()
+        );
+        assert_eq!(
+            fixture("node-modules/parent-dir/node_modules/a/index.js"),
+            resolve_from("a", fixture("node-modules/parent-dir/src")).unwrap()
+        );
+        assert_eq!(
+            fixture("node-modules/package-json/node_modules/dep/lib/index.js"),
+            resolve_from("dep", fixture("node-modules/package-json")).unwrap()
+        );
+        assert_eq!(
+            fixture("node-modules/walk/src/node_modules/not-ok/index.js"),
+            resolve_from("not-ok", fixture("node-modules/walk/src")).unwrap()
+        );
+        assert_eq!(
+            fixture("node-modules/walk/node_modules/ok/index.js"),
+            resolve_from("ok", fixture("node-modules/walk/src")).unwrap()
+        );
     }
 
     #[test]
     fn preserves_symlinks() {
-        assert_eq!(fixture("symlink/node_modules/dep/main.js"),
-            ::Resolver::new()
-                   .preserve_symlinks(true)
-                   .with_basedir(fixture("symlink"))
-                   .resolve("dep").unwrap()
-       );
+        assert_eq!(
+            fixture("symlink/node_modules/dep/main.js"),
+            Resolver::new()
+                .preserve_symlinks(true)
+                .with_basedir(fixture("symlink"))
+                .resolve("dep")
+                .unwrap()
+        );
     }
 
     #[test]
     fn does_not_preserve_symlinks() {
-        assert_eq!(fixture("symlink/linked/main.js"),
-            ::Resolver::new()
-                   .preserve_symlinks(false)
-                   .with_basedir(fixture("symlink"))
-                   .resolve("dep").unwrap()
-       );
+        assert_eq!(
+            fixture("symlink/linked/main.js"),
+            Resolver::new()
+                .preserve_symlinks(false)
+                .with_basedir(fixture("symlink"))
+                .resolve("dep")
+                .unwrap()
+        );
     }
 
     #[test]
     fn resolves_absolute_specifier() {
         let full_path = fixture("extensions/js-file");
         let id = full_path.to_str().unwrap();
-        assert_eq!(fixture("extensions/js-file.js"), ::resolve(id).unwrap());
+        assert_eq!(fixture("extensions/js-file.js"), resolve(id).unwrap());
     }
 
     #[test]
