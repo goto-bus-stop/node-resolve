@@ -254,7 +254,7 @@ impl Resolver {
         if self.preserve_symlinks {
             Ok(normalize_path(path))
         } else {
-            path.canonicalize().map_err(|e| e.into())
+            path.canonicalize().map_err(Into::into)
         }
     }
 
