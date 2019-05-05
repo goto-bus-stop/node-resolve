@@ -28,8 +28,6 @@ pub enum Error {
     IOError(IOError),
     /// A Basedir was not configured.
     UnconfiguredBasedir,
-    /// Something else went wrong.
-    ResolutionError(ResolutionError),
 }
 
 impl From<serde_json::Error> for Error {
@@ -42,39 +40,53 @@ impl From<IOError> for Error {
         Error::IOError(err)
     }
 }
-impl From<ResolutionError> for Error {
-    fn from(err: ResolutionError) -> Error {
-        Error::ResolutionError(err)
-    }
+
+#[derive(Debug)]
+enum InternalError {
+    /// Something went wrong, and we need to tell the user about this.
+    Public(Error),
+    /// Something went wrong, but we can fall back to another resolution.
+    Private(RecoverableError),
 }
 
-/// An Error, returned when the module could not be resolved.
-#[derive(Debug)]
-pub struct ResolutionError {
-    description: String,
-}
-impl ResolutionError {
-    fn new(description: &str) -> Self {
-        ResolutionError {
-            description: String::from(description),
+impl InternalError {
+    fn to_public(self) -> Error {
+        match self {
+            InternalError::Public(err) => err,
+            InternalError::Private(err) => panic!("leaking internal error: {}", err),
         }
     }
 }
 
-impl fmt::Display for ResolutionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description)
+impl From<Error> for InternalError {
+    fn from(err: Error) -> InternalError {
+        InternalError::Public(err)
     }
 }
 
-impl StdError for ResolutionError {
-    fn description(&self) -> &str {
-        self.description.as_str()
-    }
-    fn cause(&self) -> Option<&StdError> {
-        None
+impl From<RecoverableError> for InternalError {
+    fn from(err: RecoverableError) -> InternalError {
+        InternalError::Private(err)
     }
 }
+
+/// An error occured but a fallback is available (mostly while parsing package.json)
+#[derive(Debug)]
+enum RecoverableError {
+    NonObjectPackageJson,
+    MissingMain,
+}
+
+impl fmt::Display for RecoverableError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RecoverableError::NonObjectPackageJson => write!(f, "package.json is not an object"),
+            RecoverableError::MissingMain => write!(f, "package.json does not contain a \"main\" string"),
+        }
+    }
+}
+
+impl StdError for RecoverableError {}
 
 /// Resolver instances keep track of options.
 #[derive(Clone)]
@@ -241,26 +253,28 @@ impl Resolver {
             return self
                 .resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path))
-                .and_then(|p| self.normalize(&p));
+                .and_then(|p| self.normalize(&p))
+                .map_err(InternalError::to_public);
         }
 
         self.resolve_node_modules(target)
             .and_then(|p| self.normalize(&p))
+            .map_err(InternalError::to_public)
     }
 
     /// Normalize a path to a module. If symlinks should be preserved, this only removes
     /// unnecessary `./`s and `../`s from the path. Else it does `realpath()`.
-    fn normalize(&self, path: &Path) -> Result<PathBuf, Error> {
+    fn normalize(&self, path: &Path) -> Result<PathBuf, InternalError> {
         if self.preserve_symlinks {
             Ok(normalize_path(path))
         } else {
-            path.canonicalize().map_err(Into::into)
+            path.canonicalize().map_err(Error::IOError).map_err(Into::into)
         }
     }
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
     /// otherwise the `path` + each extension is tried.
-    fn resolve_as_file(&self, path: &Path) -> Result<PathBuf, Error> {
+    fn resolve_as_file(&self, path: &Path) -> Result<PathBuf, InternalError> {
         // 1. If X is a file, load X as JavaScript text.
         if path.is_file() {
             return Ok(path.to_path_buf());
@@ -269,24 +283,24 @@ impl Resolver {
         // 1. If X.js is a file, load X.js as JavaScript text.
         // 2. If X.json is a file, parse X.json to a JavaScript object.
         // 3. If X.node is a file, load X.node as binary addon.
-        let str_path = path
-            .to_str()
-            .ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
-        for ext in &self.extensions {
-            let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
-            if ext_path.is_file() {
-                return Ok(ext_path);
+        let mut ext_path = path.to_path_buf();
+        if let Some(file_name) = ext_path.file_name().and_then(|name| name.to_str()).map(String::from) {
+            for ext in &self.extensions {
+                ext_path.set_file_name(format!("{}{}", file_name, ext));
+                if ext_path.is_file() {
+                    return Ok(ext_path);
+                }
             }
         }
 
-        Err(IOError::new(IOErrorKind::NotFound, "Not Found").into())
+        Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found")).into())
     }
 
     /// Resolve a path as a directory, using the "main" key from a package.json file if it
     /// exists, or resolving to the index.EXT file if it exists.
-    fn resolve_as_directory(&self, path: &Path) -> Result<PathBuf, Error> {
+    fn resolve_as_directory(&self, path: &Path) -> Result<PathBuf, InternalError> {
         if !path.is_dir() {
-            return Err(IOError::new(IOErrorKind::NotFound, "Not Found").into());
+            return Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found")).into());
         }
 
         // 1. If X/package.json is a file, use it.
@@ -303,12 +317,12 @@ impl Resolver {
     }
 
     /// Resolve using the package.json "main" key.
-    fn resolve_package_main(&self, pkg_path: &Path) -> Result<PathBuf, Error> {
+    fn resolve_package_main(&self, pkg_path: &Path) -> Result<PathBuf, InternalError> {
         let pkg_dir = pkg_path.parent().unwrap_or_else(|| Path::new(ROOT));
-        let file = File::open(pkg_path)?;
-        let pkg: Value = serde_json::from_reader(file)?;
+        let file = File::open(pkg_path).map_err(Error::IOError)?;
+        let pkg: Value = serde_json::from_reader(file).map_err(Error::JSONError)?;
         if !pkg.is_object() {
-            return Err(ResolutionError::new("package.json is not an object").into());
+            return Err(RecoverableError::NonObjectPackageJson.into());
         }
 
         let main_field = self
@@ -323,13 +337,13 @@ impl Resolver {
                     .or_else(|_| self.resolve_as_directory(&path))
             }
             None => {
-                Err(ResolutionError::new("package.json does not contain a \"main\" string").into())
+                Err(RecoverableError::MissingMain.into())
             }
         }
     }
 
     /// Resolve a directory to its index.EXT.
-    fn resolve_index(&self, path: &Path) -> Result<PathBuf, Error> {
+    fn resolve_index(&self, path: &Path) -> Result<PathBuf, InternalError> {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
@@ -343,11 +357,11 @@ impl Resolver {
         Err(Error::IOError(IOError::new(
             IOErrorKind::NotFound,
             "Not Found",
-        )))
+        )).into())
     }
 
     /// Resolve by walking up node_modules folders.
-    fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, Error> {
+    fn resolve_node_modules(&self, target: &str) -> Result<PathBuf, InternalError> {
         let basedir = self.get_basedir()?;
         let node_modules = basedir.join("node_modules");
         if node_modules.is_dir() {
@@ -367,7 +381,7 @@ impl Resolver {
             None => Err(Error::IOError(IOError::new(
                 IOErrorKind::NotFound,
                 "Not Found",
-            ))),
+            )).into()),
         }
     }
 }
