@@ -18,6 +18,8 @@ use std::fs::File;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use std::path::{Component as PathComponent, Path, PathBuf};
 
+static ROOT: &str = "/";
+
 #[derive(Debug)]
 pub enum Error {
     /// Failed to parse a package.json file.
@@ -109,10 +111,11 @@ impl Resolver {
         Resolver::default()
     }
 
-    fn get_basedir(&self) -> Result<&PathBuf, Error> {
+    fn get_basedir(&self) -> Result<&Path, Error> {
         self.basedir
             .as_ref()
             .ok_or_else(|| Error::UnconfiguredBasedir)
+            .map(PathBuf::as_path)
     }
 
     /// Create a new resolver with a different basedir.
@@ -224,19 +227,17 @@ impl Resolver {
             return Ok(PathBuf::from(target));
         }
 
-        // TODO how to not always initialise this here?
-        let root = PathBuf::from("/");
         // 2. If X begins with '/'
         let basedir = if target.starts_with('/') {
             // 2.a. Set Y to be the filesystem root
-            &root
+            Path::new(ROOT)
         } else {
             self.get_basedir()?
         };
 
         // 3. If X begins with './' or '/' or '../'
         if target.starts_with("./") || target.starts_with('/') || target.starts_with("../") {
-            let path = basedir.as_path().join(target);
+            let path = basedir.join(target);
             return self
                 .resolve_as_file(&path)
                 .or_else(|_| self.resolve_as_directory(&path))
@@ -249,7 +250,7 @@ impl Resolver {
 
     /// Normalize a path to a module. If symlinks should be preserved, this only removes
     /// unnecessary `./`s and `../`s from the path. Else it does `realpath()`.
-    fn normalize(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+    fn normalize(&self, path: &Path) -> Result<PathBuf, Error> {
         if self.preserve_symlinks {
             Ok(normalize_path(path))
         } else {
@@ -259,10 +260,10 @@ impl Resolver {
 
     /// Resolve a path as a file. If `path` refers to a file, it is returned;
     /// otherwise the `path` + each extension is tried.
-    fn resolve_as_file(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+    fn resolve_as_file(&self, path: &Path) -> Result<PathBuf, Error> {
         // 1. If X is a file, load X as JavaScript text.
         if path.is_file() {
-            return Ok(path.clone());
+            return Ok(path.to_path_buf());
         }
 
         // 1. If X.js is a file, load X.js as JavaScript text.
@@ -283,7 +284,7 @@ impl Resolver {
 
     /// Resolve a path as a directory, using the "main" key from a package.json file if it
     /// exists, or resolving to the index.EXT file if it exists.
-    fn resolve_as_directory(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+    fn resolve_as_directory(&self, path: &Path) -> Result<PathBuf, Error> {
         if !path.is_dir() {
             return Err(IOError::new(IOErrorKind::NotFound, "Not Found").into());
         }
@@ -302,10 +303,8 @@ impl Resolver {
     }
 
     /// Resolve using the package.json "main" key.
-    fn resolve_package_main(&self, pkg_path: &PathBuf) -> Result<PathBuf, Error> {
-        // TODO how to not always initialise this here?
-        let root = PathBuf::from("/");
-        let pkg_dir = pkg_path.parent().unwrap_or(&root);
+    fn resolve_package_main(&self, pkg_path: &Path) -> Result<PathBuf, Error> {
+        let pkg_dir = pkg_path.parent().unwrap_or_else(|| Path::new(ROOT));
         let file = File::open(pkg_path)?;
         let pkg: Value = serde_json::from_reader(file)?;
         if !pkg.is_object() {
@@ -330,7 +329,7 @@ impl Resolver {
     }
 
     /// Resolve a directory to its index.EXT.
-    fn resolve_index(&self, path: &PathBuf) -> Result<PathBuf, Error> {
+    fn resolve_index(&self, path: &Path) -> Result<PathBuf, Error> {
         // 1. If X/index.js is a file, load X/index.js as JavaScript text.
         // 2. If X/index.json is a file, parse X/index.json to a JavaScript object.
         // 3. If X/index.node is a file, load X/index.node as binary addon.
