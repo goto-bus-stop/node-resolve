@@ -17,7 +17,6 @@ use std::fmt;
 use std::fs::File;
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use std::path::{Component as PathComponent, Path, PathBuf};
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -79,9 +78,9 @@ impl StdError for ResolutionError {
 #[derive(Clone)]
 pub struct Resolver {
     basedir: Option<PathBuf>,
-    extensions: Rc<Vec<String>>, // Rc so the vec doesn't need to be cloned
+    extensions: Vec<String>,
     preserve_symlinks: bool,
-    main_fields: Rc<Vec<String>>,
+    main_fields: Vec<String>,
 }
 
 impl Default for Resolver {
@@ -93,13 +92,13 @@ impl Default for Resolver {
     fn default() -> Resolver {
         Resolver {
             basedir: None,
-            extensions: Rc::new(vec![
+            extensions: vec![
                 String::from(".js"),
                 String::from(".json"),
                 String::from(".node"),
-            ]),
+            ],
             preserve_symlinks: false,
-            main_fields: Rc::new(vec![String::from("main")]),
+            main_fields: vec![String::from("main")],
         }
     }
 }
@@ -145,7 +144,7 @@ impl Resolver {
         T::Item: ToString,
     {
         Resolver {
-            extensions: Rc::new(normalize_extensions(extensions)),
+            extensions: normalize_extensions(extensions),
             ..self
         }
     }
@@ -177,12 +176,10 @@ impl Resolver {
         T::Item: ToString,
     {
         Resolver {
-            main_fields: Rc::new(
-                main_fields
-                    .into_iter()
-                    .map(|field| field.to_string())
-                    .collect(),
-            ),
+            main_fields: main_fields
+                .into_iter()
+                .map(|field| field.to_string())
+                .collect(),
             ..self
         }
     }
@@ -274,7 +271,7 @@ impl Resolver {
         let str_path = path
             .to_str()
             .ok_or_else(|| Error::ResolutionError(ResolutionError::new("Invalid path")))?;
-        for ext in self.extensions.iter() {
+        for ext in &self.extensions {
             let ext_path = PathBuf::from(format!("{}{}", str_path, ext));
             if ext_path.is_file() {
                 return Ok(ext_path);
