@@ -9,9 +9,6 @@
 //! // → Ok("/other/path/node_modules/abc/index.js")
 //! ```
 
-extern crate node_builtins;
-extern crate serde_json;
-
 use node_builtins::BUILTINS;
 use serde_json::Value;
 use std::default::Default;
@@ -616,10 +613,10 @@ mod tests {
 
     #[test]
     fn core_modules() {
-        assert!(::is_core_module("events"));
-        assert!(!::is_core_module("events/"));
-        assert!(!::is_core_module("./events"));
-        assert!(::is_core_module("stream"));
-        assert!(!::is_core_module("acorn"));
+        assert!(is_core_module("events"));
+        assert!(!is_core_module("events/"));
+        assert!(!is_core_module("./events"));
+        assert!(is_core_module("stream"));
+        assert!(!is_core_module("acorn"));
     }
 }
