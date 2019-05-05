@@ -85,6 +85,11 @@ pub struct Resolver {
 }
 
 impl Default for Resolver {
+    /// Create a new resolver with the default Node.js configuration.
+    ///
+    /// - It resolves .js, .json, and .node files, in that order;
+    /// - It expands symlinks;
+    /// - It uses the package.json "main" field for bare specifier lookups.
     fn default() -> Resolver {
         Resolver {
             basedir: None,
@@ -100,9 +105,7 @@ impl Default for Resolver {
 }
 
 impl Resolver {
-    /// Create a new resolver.
-    ///
-    /// A Resolver instance can be configured using the various methods below.
+    #[deprecated(since = "2.3.0", note = "use Resolver::default() instead")]
     pub fn new() -> Self {
         Resolver::default()
     }
@@ -130,7 +133,7 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/module/index.mjs")),
-    ///     Resolver::new()
+    ///     Resolver::default()
     ///         .extensions(&[".mjs", ".js", ".json"])
     ///         .with_basedir("./fixtures")
     ///         .resolve("./module")
@@ -161,7 +164,7 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/module-main/main.mjs"),
-    ///     Resolver::new()
+    ///     Resolver::default()
     ///         .extensions(&[".mjs", ".js", ".json"])
     ///         .main_fields(&["module", "main"])
     ///         .with_basedir("./fixtures")
@@ -192,7 +195,7 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/node_modules/dep/main.js").canonicalize()),
-    ///     Resolver::new()
+    ///     Resolver::default()
     ///            .preserve_symlinks(true)
     ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
     ///            .resolve("dep")
@@ -203,7 +206,7 @@ impl Resolver {
     /// use node_resolve::Resolver;
     ///
     /// assert_eq!(Ok(PathBuf::from("./fixtures/symlink/linked/main.js").canonicalize()),
-    ///     Resolver::new()
+    ///     Resolver::default()
     ///            .preserve_symlinks(false)
     ///            .with_basedir(PathBuf::from("./fixtures/symlink"))
     ///            .resolve("dep")
@@ -431,7 +434,7 @@ pub fn is_core_module(target: &str) -> bool {
 /// }
 /// ```
 pub fn resolve(target: &str) -> Result<PathBuf, Error> {
-    Resolver::new()
+    Resolver::default()
         .with_basedir(PathBuf::from("."))
         .resolve(target)
 }
@@ -446,7 +449,7 @@ pub fn resolve(target: &str) -> Result<PathBuf, Error> {
 /// }
 /// ```
 pub fn resolve_from(target: &str, basedir: PathBuf) -> Result<PathBuf, Error> {
-    Resolver::new().with_basedir(basedir).resolve(target)
+    Resolver::default().with_basedir(basedir).resolve(target)
 }
 
 #[cfg(test)]
@@ -486,7 +489,7 @@ mod tests {
         );
         assert_eq!(
             fixture("extensions/other-file.ext"),
-            Resolver::new()
+            Resolver::default()
                 .extensions(&[".ext"])
                 .with_basedir(fixture(""))
                 .resolve("./extensions/other-file")
@@ -494,7 +497,7 @@ mod tests {
         );
         assert_eq!(
             fixture("extensions/module.mjs"),
-            Resolver::new()
+            Resolver::default()
                 .extensions(&[".mjs"])
                 .with_basedir(fixture(""))
                 .resolve("./extensions/module")
@@ -530,7 +533,7 @@ mod tests {
         );
         assert_eq!(
             fixture("package-json/main-file/whatever.js"),
-            Resolver::new()
+            Resolver::default()
                 .main_fields(&["module", "main"])
                 .with_basedir(fixture(""))
                 .resolve("./package-json/main-file")
@@ -538,7 +541,7 @@ mod tests {
         );
         assert_eq!(
             fixture("package-json/module/index.mjs"),
-            Resolver::new()
+            Resolver::default()
                 .extensions(&[".mjs", ".js"])
                 .main_fields(&["module", "main"])
                 .with_basedir(fixture(""))
@@ -547,7 +550,7 @@ mod tests {
         );
         assert_eq!(
             fixture("package-json/module-main/main.mjs"),
-            Resolver::new()
+            Resolver::default()
                 .extensions(&[".mjs", ".js"])
                 .main_fields(&["module", "main"])
                 .with_basedir(fixture(""))
@@ -584,7 +587,7 @@ mod tests {
     fn preserves_symlinks() {
         assert_eq!(
             fixture("symlink/node_modules/dep/main.js"),
-            Resolver::new()
+            Resolver::default()
                 .preserve_symlinks(true)
                 .with_basedir(fixture("symlink"))
                 .resolve("dep")
@@ -596,7 +599,7 @@ mod tests {
     fn does_not_preserve_symlinks() {
         assert_eq!(
             fixture("symlink/linked/main.js"),
-            Resolver::new()
+            Resolver::default()
                 .preserve_symlinks(false)
                 .with_basedir(fixture("symlink"))
                 .resolve("dep")
