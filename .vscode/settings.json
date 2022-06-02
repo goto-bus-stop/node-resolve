@@ -1,0 +1,7 @@
+{
+  "files.associations": {
+    "*.ttss": "css",
+    "*.pegjs": "pegjs",
+    "*.ttml": "xml"
+  }
+}

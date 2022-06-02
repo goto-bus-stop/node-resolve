@@ -293,7 +293,7 @@ impl Resolver {
             }
         }
 
-        Err(Error::IOError(IOError::new(IOErrorKind::NotFound, "Not Found")).into())
+        self.resolve_index(&path)
     }
 
     /// Resolve a path as a directory, using the "main" key from a package.json file if it
@@ -520,6 +520,10 @@ mod tests {
         assert_eq!(
             fixture("package-json/main-file/whatever.js"),
             resolve_fixture("./package-json/main-file")
+        );
+        assert_eq!(
+            fixture("package-json/main-index/index.js"),
+            resolve_fixture("./package-json/main-index")
         );
         assert_eq!(
             fixture("package-json/main-file-noext/whatever.js"),
